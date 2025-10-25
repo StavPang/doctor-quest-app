@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase, Question } from '@/lib/supabase'
+import { supabase, Question, UserStats } from '@/lib/supabase'
+import { User } from '@supabase/supabase-js'
+import AuthButton from '@/components/AuthButton'
 
 export default function Home() {
   const [questions, setQuestions] = useState<Question[]>([])
@@ -13,10 +15,52 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [subjects, setSubjects] = useState<string[]>([])
   const [selectedSubject, setSelectedSubject] = useState<string>('all')
+  const [user, setUser] = useState<User | null>(null)
+  const [userStats, setUserStats] = useState<UserStats | null>(null)
 
   useEffect(() => {
     fetchQuestions()
+    checkUser()
+
+    // Listen for auth changes
+    const { data: { subscription }} = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+      if (session?.user) {
+        fetchUserStats(session.user.id)
+      } else {
+        setUserStats(null)
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [selectedSubject])
+
+  const checkUser = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    setUser(session?.user ?? null)
+    if (session?.user) {
+      await fetchUserStats(session.user.id)
+    }
+  }
+
+  const fetchUserStats = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_stats')
+        .select('*')
+        .eq('user_id', userId)
+        .single()
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching user stats:', error)
+        return
+      }
+
+      setUserStats(data)
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
 
   const fetchQuestions = async () => {
     setLoading(true)
@@ -63,14 +107,41 @@ export default function Home() {
     setSelectedAnswer(option)
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedAnswer) return
+
+    const isCorrect = selectedAnswer === currentQuestion.correct_option
 
     setShowResult(true)
     setAnsweredQuestions(prev => prev + 1)
 
-    if (selectedAnswer === currentQuestion.correct_option) {
+    if (isCorrect) {
       setScore(prev => prev + 1)
+    }
+
+    // Save score to database if user is logged in
+    if (user) {
+      try {
+        const { error } = await supabase
+          .from('user_scores')
+          .upsert({
+            user_id: user.id,
+            question_id: currentQuestion.id.toString(),
+            subject: currentQuestion.subject,
+            is_correct: isCorrect
+          }, {
+            onConflict: 'user_id,question_id'
+          })
+
+        if (error) {
+          console.error('Error saving score:', error)
+        } else {
+          // Refresh user stats
+          await fetchUserStats(user.id)
+        }
+      } catch (error) {
+        console.error('Error:', error)
+      }
     }
   }
 
@@ -132,10 +203,46 @@ export default function Home() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="bg-slate-800 rounded-t-2xl shadow-2xl p-4 sm:p-6 border-b-2 border-cyan-500/30">
-          <h1 className="text-2xl sm:text-3xl font-bold text-center bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent mb-2">
-            DoctorQuest
-          </h1>
-          <p className="text-center text-gray-400 text-sm sm:text-base">Ερωτήσεις Ιατρικής</p>
+          <div className="flex justify-between items-start mb-4">
+            <div className="flex-1">
+              <h1 className="text-2xl sm:text-3xl font-bold text-center bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent mb-2">
+                DoctorQuest
+              </h1>
+              <p className="text-center text-gray-400 text-sm sm:text-base">Ερωτήσεις Ιατρικής</p>
+            </div>
+            <div className="hidden sm:block">
+              <AuthButton />
+            </div>
+          </div>
+
+          {/* Mobile Auth Button */}
+          <div className="sm:hidden mb-4 flex justify-center">
+            <AuthButton />
+          </div>
+
+          {/* User Stats Banner */}
+          {user && userStats && (
+            <div className="mb-4 p-3 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-lg">
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-lg sm:text-xl font-bold text-cyan-400">{userStats.total_questions_answered}</p>
+                  <p className="text-xs text-gray-400">Συνολικές</p>
+                </div>
+                <div>
+                  <p className="text-lg sm:text-xl font-bold text-emerald-400">{userStats.total_correct_answers}</p>
+                  <p className="text-xs text-gray-400">Σωστές</p>
+                </div>
+                <div>
+                  <p className="text-lg sm:text-xl font-bold text-purple-400">
+                    {userStats.total_questions_answered > 0
+                      ? Math.round((userStats.total_correct_answers / userStats.total_questions_answered) * 100)
+                      : 0}%
+                  </p>
+                  <p className="text-xs text-gray-400">Ποσοστό</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Subject Filter */}
           <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-2">
