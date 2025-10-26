@@ -12,6 +12,7 @@ export default function Home() {
   const [showResult, setShowResult] = useState(false)
   const [score, setScore] = useState(0)
   const [answeredQuestions, setAnsweredQuestions] = useState(0)
+  const [answeredQuestionIds, setAnsweredQuestionIds] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(true)
   const [subjects, setSubjects] = useState<string[]>([])
   const [selectedSubject, setSelectedSubject] = useState<string>('all')
@@ -88,6 +89,7 @@ export default function Home() {
         setShowResult(false)
         setScore(0)
         setAnsweredQuestions(0)
+        setAnsweredQuestionIds(new Set())
 
         // Extract unique subjects
         const uniqueSubjects = Array.from(new Set(data.map(q => q.subject)))
@@ -111,12 +113,19 @@ export default function Home() {
     if (!selectedAnswer) return
 
     const isCorrect = selectedAnswer === currentQuestion.correct_option
+    const questionId = currentQuestion.id
+    const isAlreadyAnswered = answeredQuestionIds.has(questionId)
 
     setShowResult(true)
-    setAnsweredQuestions(prev => prev + 1)
 
-    if (isCorrect) {
-      setScore(prev => prev + 1)
+    // Only increment counters if this question hasn't been answered in this session
+    if (!isAlreadyAnswered) {
+      setAnsweredQuestions(prev => prev + 1)
+      setAnsweredQuestionIds(prev => new Set(prev).add(questionId))
+
+      if (isCorrect) {
+        setScore(prev => prev + 1)
+      }
     }
 
     // Save score to database if user is logged in
@@ -167,6 +176,7 @@ export default function Home() {
     setShowResult(false)
     setScore(0)
     setAnsweredQuestions(0)
+    setAnsweredQuestionIds(new Set())
   }
 
   if (loading) {
@@ -203,15 +213,15 @@ export default function Home() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="bg-slate-800 rounded-t-2xl shadow-2xl p-4 sm:p-6 border-b-2 border-cyan-500/30">
-          <div className="flex justify-between items-start mb-4">
-            <div className="flex-1">
+          <div className="relative mb-4">
+            <div className="absolute right-0 top-0 hidden sm:block">
+              <AuthButton />
+            </div>
+            <div className="w-full">
               <h1 className="text-2xl sm:text-3xl font-bold text-center bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent mb-2">
                 DoctorQuest
               </h1>
               <p className="text-center text-gray-400 text-sm sm:text-base">Ερωτήσεις Ιατρικής</p>
-            </div>
-            <div className="hidden sm:block">
-              <AuthButton />
             </div>
           </div>
 
