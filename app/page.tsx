@@ -151,33 +151,6 @@ export default function Home() {
       } catch (error) {
         console.error('Error:', error)
       }
-    if (isCorrect) {
-      setScore(prev => prev + 1)
-    }
-
-    // Save score to database if user is logged in
-    if (user) {
-      try {
-        const { error } = await supabase
-          .from('user_scores')
-          .upsert({
-            user_id: user.id,
-            question_id: currentQuestion.id.toString(),
-            subject: currentQuestion.subject,
-            is_correct: isCorrect
-          }, {
-            onConflict: 'user_id,question_id'
-          })
-
-        if (error) {
-          console.error('Error saving score:', error)
-        } else {
-          // Refresh user stats
-          await fetchUserStats(user.id)
-        }
-      } catch (error) {
-        console.error('Error:', error)
-      }
     }
   }
 
@@ -245,15 +218,10 @@ export default function Home() {
               <AuthButton />
             </div>
             <div className="w-full">
-          <div className="flex justify-between items-start mb-4">
-            <div className="flex-1">
               <h1 className="text-2xl sm:text-3xl font-bold text-center bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent mb-2">
                 DoctorQuest
               </h1>
               <p className="text-center text-gray-400 text-sm sm:text-base">Ερωτήσεις Ιατρικής</p>
-            </div>
-            <div className="hidden sm:block">
-              <AuthButton />
             </div>
           </div>
 
